@@ -265,19 +265,23 @@
       const totalKm = oneWayKm * tripMultiplier;
       const totalMiles = kmToMiles(totalKm);
       const co2 = totalKm * CO2_PER_KM[travelType];
+      const yearlyCO2 = co2 * 168;
+	  const yearlyTonnes = yearlyCO2 / 1000;
 
       result.innerHTML = `
-        <p><strong>Home:</strong> ${selectedHomePlace.formatted_address || selectedHomePlace.name}</p>
-        <p><strong>School:</strong> ${SCHOOL.name}</p>
-        <p><strong>Travel type:</strong> ${MODE_LABELS[travelType]}</p>
-        <div class="summary-box">
-          <p><strong>One-way route:</strong> ${oneWayKm.toFixed(2)} km / ${oneWayMiles.toFixed(2)} miles</p>
-          <p><strong>Total school-run distance:</strong> ${totalKm.toFixed(2)} km / ${totalMiles.toFixed(2)} miles</p>
-          <p><strong>Trip multiplier used:</strong> ${tripMultiplier} × one-way journey</p>
-          <p><strong>Estimated CO2 emitted:</strong> ${co2.toFixed(2)} kg CO2e</p>
-        </div>
+  <p><strong>Home:</strong> ${selectedHomePlace.formatted_address || selectedHomePlace.name}</p>
+  <p><strong>School:</strong> ${SCHOOL.name}</p>
+  <p><strong>Travel type:</strong> ${MODE_LABELS[travelType]}</p>
+  <div class="summary-box">
+    <p><strong>One-way route:</strong> ${oneWayKm.toFixed(2)} km / ${oneWayMiles.toFixed(2)} miles</p>
+    <p><strong>Total school-run distance per day:</strong> ${totalKm.toFixed(2)} km / ${totalMiles.toFixed(2)} miles</p>
+    <p><strong>Trip multiplier used:</strong> ${tripMultiplier} × one-way journey</p>
+    <p><strong>Estimated CO2 emitted per day:</strong> ${co2.toFixed(2)} kg CO2e</p>
+    <p><strong>Estimated CO2 emitted per school year (168 days):</strong> ${yearlyCO2.toFixed(2)} kg CO2e</p>
+    <p><strong>Estimated CO2 emitted per school year:</strong> ${yearlyTonnes.toFixed(3)} tonnes CO2e</p>
+  </div>
         <p class="small">
-          Assumption used: morning school run, return home, afternoon collection, and return home again.
+          Assumptions: morning school run, return home, afternoon collection, and return home again.
         </p>
       `;
     });
