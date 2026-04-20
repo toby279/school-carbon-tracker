@@ -251,10 +251,10 @@
 
     directionsService.route(getRouteRequest(travelType), (response, status) => {
       if (status !== "OK") {
-        console.error("Directions error:", status, response);
-        result.innerHTML = '<p class="error">No route found for that travel type from the selected address.</p>';
-        return;
-      }
+  console.error("Directions error:", status, response);
+  result.innerHTML = `<p class="error">Directions error: ${status}</p>`;
+  return;
+}
 
       directionsRenderer.setDirections(response);
 
