@@ -3,17 +3,19 @@
 <head>
   <meta charset="UTF-8">
   <title>School Carbon Tracker</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
   <style>
     body {
-      font-family: Arial;
+      font-family: Arial, sans-serif;
       background: #e8f5e9;
       padding: 20px;
+      margin: 0;
     }
     .box {
       background: white;
       padding: 20px;
       border-radius: 10px;
-      max-width: 400px;
+      max-width: 700px;
       margin: auto;
       box-shadow: 0 4px 10px rgba(0,0,0,0.1);
     }
@@ -23,6 +25,8 @@
       margin: 8px 0;
       border-radius: 5px;
       border: 1px solid #ccc;
+      box-sizing: border-box;
+      font-size: 16px;
     }
     button {
       background: green;
@@ -34,13 +38,35 @@
     button:hover {
       background: darkgreen;
     }
+    #result {
+      margin-top: 16px;
+      line-height: 1.6;
+    }
+    #map {
+      width: 100%;
+      height: 350px;
+      margin-top: 20px;
+      border-radius: 10px;
+      overflow: hidden;
+      background: #f2f2f2;
+    }
+    .small {
+      color: #555;
+      font-size: 14px;
+    }
+    .error {
+      color: #b00020;
+      font-weight: bold;
+    }
   </style>
 </head>
-
 <body>
 
 <div class="box">
   <h2>School Carbon Tracker</h2>
+  <p class="small">
+    Enter your home address, your school, and your car type to calculate distance and CO2 emissions.
+  </p>
 
   <input id="home" placeholder="Your home address">
   <input id="school" placeholder="Your school">
@@ -51,33 +77,124 @@
     <option value="electric">Electric</option>
   </select>
 
-  <button onclick="calculate()">Calculate CO2 Emissions</button>
+  <button id="calcBtn">Calculate CO2 Emissions</button>
 
-  <p id="result"></p>
+  <div id="result"></div>
+  <div id="map"></div>
 </div>
 
 <script>
-  function fakeDistance() {
-    return Math.random() * 5 + 1;
+  let map;
+  let routePolyline;
+  let homeMarker;
+  let schoolMarker;
+
+  const emissions = {
+    petrol: 0.1294, // 0.647 / 5
+    diesel: 0.173,  // 0.865 / 5
+    electric: 0
+  };
+
+  async function initMap() {
+    const { Map } = await google.maps.importLibrary("maps");
+    map = new Map(document.getElementById("map"), {
+      center: { lat: 51.5074, lng: -0.1278 },
+      zoom: 10,
+      mapId: "DEMO_MAP_ID"
+    });
+
+    document.getElementById("calcBtn").addEventListener("click", calculateRouteAndCO2);
   }
 
-  function calculate() {
+  async function calculateRouteAndCO2() {
+    const home = document.getElementById("home").value.trim();
+    const school = document.getElementById("school").value.trim();
     const car = document.getElementById("car").value;
+    const result = document.getElementById("result");
 
-    const emissions = {
-      petrol: 0.1294,
-      diesel: 0.173,
-      electric: 0
-    };
+    if (!home || !school) {
+      result.innerHTML = '<p class="error">Please enter both addresses.</p>';
+      return;
+    }
 
-    const distance = fakeDistance();
-    const roundTrip = distance * 2;
-    const co2 = roundTrip * emissions[car];
+    result.textContent = "Calculating...";
 
-    document.getElementById("result").innerHTML =
-      "Distance (round trip): " + roundTrip.toFixed(2) + " km<br>" +
-      "CO2 emitted: " + co2.toFixed(2) + " kg";
+    try {
+      const { Route } = await google.maps.importLibrary("routes");
+      const routeService = new Route();
+
+      const routeRequest = {
+        origin: home,
+        destination: school,
+        travelMode: "DRIVE",
+        fields: ["legs", "distanceMeters", "duration", "path"]
+      };
+
+      const response = await routeService.computeRoutes(routeRequest);
+
+      if (!response.routes || response.routes.length === 0) {
+        result.innerHTML = '<p class="error">No route found. Please check the addresses.</p>';
+        return;
+      }
+
+      const route = response.routes[0];
+      const distanceMeters = route.distanceMeters;
+      const oneWayKm = distanceMeters / 1000;
+      const roundTripKm = oneWayKm * 2;
+      const co2 = roundTripKm * emissions[car];
+
+      result.innerHTML = `
+        <p><strong>One-way distance:</strong> ${oneWayKm.toFixed(2)} km</p>
+        <p><strong>Round-trip distance:</strong> ${roundTripKm.toFixed(2)} km</p>
+        <p><strong>Estimated CO2 emitted:</strong> ${co2.toFixed(2)} kg</p>
+      `;
+
+      if (routePolyline) {
+        routePolyline.setMap(null);
+      }
+
+      const polylines = route.createPolylines();
+      routePolyline = polylines[0];
+      routePolyline.setMap(map);
+
+      const bounds = new google.maps.LatLngBounds();
+      route.path.forEach(point => bounds.extend(point));
+      map.fitBounds(bounds);
+
+    } catch (error) {
+      console.error(error);
+      result.innerHTML = '<p class="error">There was a problem using the Google Maps API. Check your API key, enabled APIs, billing, and referrer restrictions.</p>';
+    }
   }
+
+  window.initMap = initMap;
+</script>
+
+<script>
+  (g => {
+    var h, a, k, p = "The Google Maps JavaScript API",
+      c = "google", l = "importLibrary", q = "__ib__", m = document,
+      b = window; b = b[c] || (b[c] = {});
+    var d = b.maps || (b.maps = {}), r = new Set, e = new URLSearchParams,
+      u = () => h || (h = new Promise(async (f, n) => {
+        await (a = m.createElement("script"));
+        e.set("libraries", [...r] + "");
+        for (k in g) e.set(k.replace(/[A-Z]/g, t => "_" + t[0].toLowerCase()), g[k]);
+        e.set("callback", c + ".maps." + q);
+        a.src = `https://maps.${c}apis.com/maps/api/js?` + e;
+        d[q] = f;
+        a.onerror = () => h = n(Error(p + " could not load."));
+        a.nonce = m.querySelector("script[nonce]")?.nonce || "";
+        m.head.append(a);
+      }));
+    d[l] ? console.warn(p + " only loads once. Ignoring:", g)
+         : d[l] = (f, ...n) => r.add(f) && u().then(() => d[l](f, ...n));
+  })({
+    key: "AIzaSyCnP78JvIO43qRSy32eiq3HFgnnEyuCTUI",
+    v: "weekly"
+  });
+
+  initMap();
 </script>
 
 </body>
