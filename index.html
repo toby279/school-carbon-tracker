@@ -74,7 +74,7 @@
 <div class="box">
   <h2>School Carbon Tracker</h2>
   <p class="small">
-    Enter your home address and choose your car type to calculate the distance to school and your CO2 emissions.
+    Enter your home address and choose your travel type to calculate the distance to school and your CO2 emissions.
   </p>
 
   <label for="home"><strong>Home address</strong></label>
@@ -86,11 +86,15 @@
     16 Ravenscourt Ave, London W6 0SL, UK
   </div>
 
-  <label for="car"><strong>Car type</strong></label>
+  <label for="car"><strong>Travel type</strong></label>
   <select id="car">
     <option value="petrol">Petrol</option>
     <option value="diesel">Diesel</option>
-    <option value="electric">Electric</option>
+    <option value="electric">Electric Car</option>
+    <option value="bus">Bus</option>
+    <option value="tube">Tube</option>
+    <option value="bike">Bike</option>
+    <option value="walking">Walking</option>
   </select>
 
   <button id="calcBtn">Calculate CO2 Emissions</button>
@@ -108,14 +112,18 @@
 
   const SCHOOL = {
     name: "Ravenscourt Park Preparatory School",
-    address: "16 Ravenscourt Ave, London W6 0SL, UK",
-    placeId: "ChIJwxBEfjUOdkgRbuw2WbjIDYg"
+    address: "16 Ravenscourt Ave, London W6 0SL, UK"
   };
 
+  // kg CO2 per km
   const emissions = {
     petrol: 0.1294,
     diesel: 0.173,
-    electric: 0
+    electric: 0,
+    bus: 0.08,
+    tube: 0.04,
+    bike: 0,
+    walking: 0
   };
 
   function initMap() {
@@ -143,8 +151,56 @@
     document.getElementById("calcBtn").addEventListener("click", calculateRouteAndCO2);
   }
 
+  function buildRouteRequest(travelType) {
+    const baseRequest = {
+      origin: {
+        location: selectedHomePlace.geometry.location
+      },
+      destination: SCHOOL.address
+    };
+
+    if (travelType === "bike") {
+      return {
+        ...baseRequest,
+        travelMode: google.maps.TravelMode.BICYCLING
+      };
+    }
+
+    if (travelType === "walking") {
+      return {
+        ...baseRequest,
+        travelMode: google.maps.TravelMode.WALKING
+      };
+    }
+
+    if (travelType === "bus") {
+      return {
+        ...baseRequest,
+        travelMode: google.maps.TravelMode.TRANSIT,
+        transitOptions: {
+          modes: [google.maps.TransitMode.BUS]
+        }
+      };
+    }
+
+    if (travelType === "tube") {
+      return {
+        ...baseRequest,
+        travelMode: google.maps.TravelMode.TRANSIT,
+        transitOptions: {
+          modes: [google.maps.TransitMode.SUBWAY]
+        }
+      };
+    }
+
+    return {
+      ...baseRequest,
+      travelMode: google.maps.TravelMode.DRIVING
+    };
+  }
+
   function calculateRouteAndCO2() {
-    const car = document.getElementById("car").value;
+    const travelType = document.getElementById("car").value;
     const result = document.getElementById("result");
 
     if (!selectedHomePlace || !selectedHomePlace.geometry || !selectedHomePlace.geometry.location) {
@@ -154,39 +210,41 @@
 
     result.textContent = "Calculating...";
 
-    directionsService.route(
-      {
-        origin: {
-          location: selectedHomePlace.geometry.location
-        },
-        destination: {
-          placeId: SCHOOL.placeId
-        },
-        travelMode: google.maps.TravelMode.DRIVING
-      },
-      (response, status) => {
-        if (status !== "OK") {
-          console.error("Directions error:", status, response);
-          result.innerHTML = '<p class="error">No route found. Please check the selected address.</p>';
-          return;
-        }
+    const request = buildRouteRequest(travelType);
 
-        directionsRenderer.setDirections(response);
-
-        const leg = response.routes[0].legs[0];
-        const oneWayKm = leg.distance.value / 1000;
-        const roundTripKm = oneWayKm * 2;
-        const co2 = roundTripKm * emissions[car];
-
-        result.innerHTML = `
-          <p><strong>Home:</strong> ${selectedHomePlace.formatted_address || selectedHomePlace.name}</p>
-          <p><strong>School:</strong> ${SCHOOL.name}</p>
-          <p><strong>One-way distance:</strong> ${oneWayKm.toFixed(2)} km</p>
-          <p><strong>Round-trip distance:</strong> ${roundTripKm.toFixed(2)} km</p>
-          <p><strong>Estimated CO2 emitted:</strong> ${co2.toFixed(2)} kg</p>
-        `;
+    directionsService.route(request, (response, status) => {
+      if (status !== "OK") {
+        console.error("Directions error:", status, response);
+        result.innerHTML = '<p class="error">No route found for that travel type from the selected address.</p>';
+        return;
       }
-    );
+
+      directionsRenderer.setDirections(response);
+
+      const leg = response.routes[0].legs[0];
+      const oneWayKm = leg.distance.value / 1000;
+      const roundTripKm = oneWayKm * 2;
+      const co2 = roundTripKm * emissions[travelType];
+
+      const labels = {
+        petrol: "Petrol",
+        diesel: "Diesel",
+        electric: "Electric Car",
+        bus: "Bus",
+        tube: "Tube",
+        bike: "Bike",
+        walking: "Walking"
+      };
+
+      result.innerHTML = `
+        <p><strong>Home:</strong> ${selectedHomePlace.formatted_address || selectedHomePlace.name}</p>
+        <p><strong>School:</strong> ${SCHOOL.name}</p>
+        <p><strong>Travel type:</strong> ${labels[travelType]}</p>
+        <p><strong>One-way distance:</strong> ${oneWayKm.toFixed(2)} km</p>
+        <p><strong>Round-trip distance:</strong> ${roundTripKm.toFixed(2)} km</p>
+        <p><strong>Estimated CO2 emitted:</strong> ${co2.toFixed(2)} kg</p>
+      `;
+    });
   }
 </script>
 
