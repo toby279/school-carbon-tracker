@@ -21,9 +21,9 @@
     }
     input, select, button {
       width: 100%;
-      padding: 10px;
+      padding: 14px;
       margin: 8px 0;
-      border-radius: 5px;
+      border-radius: 8px;
       border: 1px solid #ccc;
       box-sizing: border-box;
       font-size: 16px;
@@ -58,6 +58,20 @@
       color: #b00020;
       font-weight: bold;
     }
+    .school-box {
+      width: 100%;
+      padding: 14px;
+      margin: 8px 0;
+      border-radius: 8px;
+      border: 1px solid #ccc;
+      box-sizing: border-box;
+      background: #f8f8f8;
+    }
+    gmp-place-autocomplete {
+      display: block;
+      width: 100%;
+      margin: 8px 0;
+    }
   </style>
 </head>
 <body>
@@ -65,12 +79,19 @@
 <div class="box">
   <h2>School Carbon Tracker</h2>
   <p class="small">
-    Enter your home address, your school, and your car type to calculate distance and CO2 emissions.
+    Enter your home address and choose your car type to calculate the distance to school and your CO2 emissions.
   </p>
 
-  <input id="home" placeholder="Your home address">
-  <input id="school" placeholder="Your school">
+  <label for="home-autocomplete"><strong>Home address</strong></label>
+  <gmp-place-autocomplete id="home-autocomplete"></gmp-place-autocomplete>
 
+  <label><strong>School</strong></label>
+  <div class="school-box">
+    Ravenscourt Park Preparatory School<br>
+    16 Ravenscourt Ave, London W6 0SL, UK
+  </div>
+
+  <label for="car"><strong>Car type</strong></label>
   <select id="car">
     <option value="petrol">Petrol</option>
     <option value="diesel">Diesel</option>
@@ -85,86 +106,102 @@
 
 <script>
   let map;
-  let routePolyline;
-  let homeMarker;
-  let schoolMarker;
+  let directionsService;
+  let directionsRenderer;
+  let selectedHomePlace = null;
+
+  const SCHOOL = {
+    name: "Ravenscourt Park Preparatory School",
+    address: "16 Ravenscourt Ave, London W6 0SL, UK",
+    placeId: "ChIJwxBEfjUOdkgRbuw2WbjIDYg"
+  };
 
   const emissions = {
-    petrol: 0.1294, // 0.647 / 5
-    diesel: 0.173,  // 0.865 / 5
+    petrol: 0.1294,
+    diesel: 0.173,
     electric: 0
   };
 
   async function initMap() {
     const { Map } = await google.maps.importLibrary("maps");
+    await google.maps.importLibrary("places");
+
     map = new Map(document.getElementById("map"), {
-      center: { lat: 51.5074, lng: -0.1278 },
-      zoom: 10,
-      mapId: "DEMO_MAP_ID"
+      center: { lat: 51.4939, lng: -0.2383 },
+      zoom: 13
+    });
+
+    directionsService = new google.maps.DirectionsService();
+    directionsRenderer = new google.maps.DirectionsRenderer({
+      map: map
+    });
+
+    const homeAutocomplete = document.getElementById("home-autocomplete");
+
+    homeAutocomplete.includedPrimaryTypes = ["street_address"];
+    homeAutocomplete.locationBias = {
+      radius: 50000,
+      center: { lat: 51.5074, lng: -0.1278 }
+    };
+
+    homeAutocomplete.addEventListener("gmp-select", async ({ placePrediction }) => {
+      const place = placePrediction.toPlace();
+      await place.fetchFields({
+        fields: ["displayName", "formattedAddress", "location"]
+      });
+      selectedHomePlace = place;
     });
 
     document.getElementById("calcBtn").addEventListener("click", calculateRouteAndCO2);
   }
 
-  async function calculateRouteAndCO2() {
-    const home = document.getElementById("home").value.trim();
-    const school = document.getElementById("school").value.trim();
+  function calculateRouteAndCO2() {
     const car = document.getElementById("car").value;
     const result = document.getElementById("result");
 
-    if (!home || !school) {
-      result.innerHTML = '<p class="error">Please enter both addresses.</p>';
+    if (!selectedHomePlace || !selectedHomePlace.location) {
+      result.innerHTML = '<p class="error">Please choose your home address from the autocomplete list.</p>';
       return;
     }
 
     result.textContent = "Calculating...";
 
-    try {
-      const { Route } = await google.maps.importLibrary("routes");
-      const routeService = new Route();
+    directionsService.route(
+      {
+        origin: {
+          location: {
+            lat: selectedHomePlace.location.lat(),
+            lng: selectedHomePlace.location.lng()
+          }
+        },
+        destination: {
+          placeId: SCHOOL.placeId
+        },
+        travelMode: google.maps.TravelMode.DRIVING
+      },
+      (response, status) => {
+        if (status !== "OK") {
+          console.error("Directions error:", status, response);
+          result.innerHTML = '<p class="error">No route found. Please check the selected address.</p>';
+          return;
+        }
 
-      const routeRequest = {
-        origin: home,
-        destination: school,
-        travelMode: "DRIVE",
-        fields: ["legs", "distanceMeters", "duration", "path"]
-      };
+        directionsRenderer.setDirections(response);
 
-      const response = await routeService.computeRoutes(routeRequest);
+        const leg = response.routes[0].legs[0];
+        const oneWayKm = leg.distance.value / 1000;
+        const roundTripKm = oneWayKm * 2;
+        const co2 = roundTripKm * emissions[car];
 
-      if (!response.routes || response.routes.length === 0) {
-        result.innerHTML = '<p class="error">No route found. Please check the addresses.</p>';
-        return;
+        result.innerHTML = `
+          <p><strong>Home:</strong> ${selectedHomePlace.formattedAddress}</p>
+          <p><strong>School:</strong> ${SCHOOL.name}</p>
+          <p><strong>One-way distance:</strong> ${oneWayKm.toFixed(2)} km</p>
+          <p><strong>Round-trip distance:</strong> ${roundTripKm.toFixed(2)} km</p>
+          <p><strong>Estimated CO2 emitted:</strong> ${co2.toFixed(2)} kg</p>
+        `;
       }
-
-      const route = response.routes[0];
-      const distanceMeters = route.distanceMeters;
-      const oneWayKm = distanceMeters / 1000;
-      const roundTripKm = oneWayKm * 2;
-      const co2 = roundTripKm * emissions[car];
-
-      result.innerHTML = `
-        <p><strong>One-way distance:</strong> ${oneWayKm.toFixed(2)} km</p>
-        <p><strong>Round-trip distance:</strong> ${roundTripKm.toFixed(2)} km</p>
-        <p><strong>Estimated CO2 emitted:</strong> ${co2.toFixed(2)} kg</p>
-      `;
-
-      if (routePolyline) {
-        routePolyline.setMap(null);
-      }
-
-      const polylines = route.createPolylines();
-      routePolyline = polylines[0];
-      routePolyline.setMap(map);
-
-      const bounds = new google.maps.LatLngBounds();
-      route.path.forEach(point => bounds.extend(point));
-      map.fitBounds(bounds);
-
-    } catch (error) {
-      console.error(error);
-      result.innerHTML = '<p class="error">There was a problem using the Google Maps API. Check your API key, enabled APIs, billing, and referrer restrictions.</p>';
-    }
+    );
   }
 
   window.initMap = initMap;
