@@ -15,7 +15,7 @@
       background: white;
       padding: 20px;
       border-radius: 10px;
-      max-width: 700px;
+      max-width: 760px;
       margin: auto;
       box-shadow: 0 4px 10px rgba(0,0,0,0.1);
     }
@@ -40,7 +40,7 @@
     }
     #result {
       margin-top: 16px;
-      line-height: 1.6;
+      line-height: 1.7;
     }
     #map {
       width: 100%;
@@ -67,6 +67,13 @@
       box-sizing: border-box;
       background: #f8f8f8;
     }
+    .summary-box {
+      background: #f6fff6;
+      border: 1px solid #d8ecd8;
+      padding: 14px;
+      border-radius: 8px;
+      margin-top: 14px;
+    }
   </style>
 </head>
 <body>
@@ -74,7 +81,7 @@
 <div class="box">
   <h2>School Carbon Tracker</h2>
   <p class="small">
-    Enter your home address and choose your travel type to calculate the distance to school and your CO2 emissions.
+    Enter your home address and choose your travel type to calculate the school-run distance and estimated CO2 emissions.
   </p>
 
   <label for="home"><strong>Home address</strong></label>
@@ -86,14 +93,16 @@
     16 Ravenscourt Ave, London W6 0SL, UK
   </div>
 
-  <label for="car"><strong>Travel type</strong></label>
-  <select id="car">
-    <option value="petrol">Petrol</option>
-    <option value="diesel">Diesel</option>
-    <option value="electric">Electric Car</option>
+  <label for="travelType"><strong>Travel type</strong></label>
+  <select id="travelType">
+    <option value="petrolCar">Petrol Car</option>
+    <option value="hybridCar">Hybrid Car</option>
+    <option value="dieselCar">Diesel Car</option>
+    <option value="electricCar">Electric Car</option>
     <option value="bus">Bus</option>
     <option value="tube">Tube</option>
-    <option value="bike">Bike</option>
+    <option value="cyclingStandard">Bike</option>
+    <option value="cyclingElectric">Electric Bike</option>
     <option value="walking">Walking</option>
   </select>
 
@@ -115,43 +124,48 @@
     address: "16 Ravenscourt Ave, London W6 0SL, UK"
   };
 
-  // kg CO2 per km
-  const emissions = {
-    petrol: 0.1294,
-    diesel: 0.173,
-    electric: 0,
-    bus: 0.08,
-    tube: 0.04,
-    bike: 0,
+  // kg CO2e per km, by mode
+  const CO2_PER_KM = {
+    petrolCar: 0.1645,
+    hybridCar: 0.1195,
+    dieselCar: 0.1670,
+    electricCar: 0.0395,
+    bus: 0.1160,
+    tube: 0.0278,
+    cyclingStandard: 0,
+    cyclingElectric: 0.0025,
     walking: 0
   };
 
-  function initMap() {
-    map = new google.maps.Map(document.getElementById("map"), {
-      center: { lat: 51.4939, lng: -0.2383 },
-      zoom: 13
-    });
+  const MODE_LABELS = {
+    petrolCar: "Petrol Car",
+    hybridCar: "Hybrid Car",
+    dieselCar: "Diesel Car",
+    electricCar: "Electric Car",
+    bus: "Bus",
+    tube: "Tube",
+    cyclingStandard: "Bike",
+    cyclingElectric: "Electric Bike",
+    walking: "Walking"
+  };
 
-    directionsService = new google.maps.DirectionsService();
-    directionsRenderer = new google.maps.DirectionsRenderer({ map: map });
-
-    const input = document.getElementById("home");
-
-    autocomplete = new google.maps.places.Autocomplete(input, {
-      types: ["address"],
-      componentRestrictions: { country: "gb" },
-      fields: ["formatted_address", "geometry", "name"]
-    });
-
-    autocomplete.addListener("place_changed", () => {
-      selectedHomePlace = autocomplete.getPlace();
-      console.log("Selected place:", selectedHomePlace);
-    });
-
-    document.getElementById("calcBtn").addEventListener("click", calculateRouteAndCO2);
+  function kmToMiles(km) {
+    return km * 0.621371;
   }
 
-  function buildRouteRequest(travelType) {
+  function getTripMultiplier(mode) {
+    // Four one-way school-run legs in total:
+    // 1) home -> school (parent + child)
+    // 2) school -> home (parent)
+    // 3) home -> school (parent)
+    // 4) school -> home (parent + child)
+    // For vehicle-based modes, emissions are per vehicle, so use 4 trips.
+    // For passenger/person-based modes, use 2 + 1 + 1 + 2 = 6 person-trips.
+    const passengerModes = ["bus", "tube", "cyclingStandard", "cyclingElectric", "walking"];
+    return passengerModes.includes(mode) ? 6 : 4;
+  }
+
+  function getRouteRequest(travelType) {
     const baseRequest = {
       origin: {
         location: selectedHomePlace.geometry.location
@@ -159,7 +173,7 @@
       destination: SCHOOL.address
     };
 
-    if (travelType === "bike") {
+    if (travelType === "cyclingStandard" || travelType === "cyclingElectric") {
       return {
         ...baseRequest,
         travelMode: google.maps.TravelMode.BICYCLING
@@ -199,8 +213,33 @@
     };
   }
 
+  function initMap() {
+    map = new google.maps.Map(document.getElementById("map"), {
+      center: { lat: 51.4939, lng: -0.2383 },
+      zoom: 13
+    });
+
+    directionsService = new google.maps.DirectionsService();
+    directionsRenderer = new google.maps.DirectionsRenderer({ map: map });
+
+    const input = document.getElementById("home");
+
+    autocomplete = new google.maps.places.Autocomplete(input, {
+      types: ["address"],
+      componentRestrictions: { country: "gb" },
+      fields: ["formatted_address", "geometry", "name"]
+    });
+
+    autocomplete.addListener("place_changed", () => {
+      selectedHomePlace = autocomplete.getPlace();
+      console.log("Selected place:", selectedHomePlace);
+    });
+
+    document.getElementById("calcBtn").addEventListener("click", calculateRouteAndCO2);
+  }
+
   function calculateRouteAndCO2() {
-    const travelType = document.getElementById("car").value;
+    const travelType = document.getElementById("travelType").value;
     const result = document.getElementById("result");
 
     if (!selectedHomePlace || !selectedHomePlace.geometry || !selectedHomePlace.geometry.location) {
@@ -210,9 +249,7 @@
 
     result.textContent = "Calculating...";
 
-    const request = buildRouteRequest(travelType);
-
-    directionsService.route(request, (response, status) => {
+    directionsService.route(getRouteRequest(travelType), (response, status) => {
       if (status !== "OK") {
         console.error("Directions error:", status, response);
         result.innerHTML = '<p class="error">No route found for that travel type from the selected address.</p>';
@@ -223,26 +260,25 @@
 
       const leg = response.routes[0].legs[0];
       const oneWayKm = leg.distance.value / 1000;
-      const roundTripKm = oneWayKm * 2;
-      const co2 = roundTripKm * emissions[travelType];
-
-      const labels = {
-        petrol: "Petrol",
-        diesel: "Diesel",
-        electric: "Electric Car",
-        bus: "Bus",
-        tube: "Tube",
-        bike: "Bike",
-        walking: "Walking"
-      };
+      const oneWayMiles = kmToMiles(oneWayKm);
+      const tripMultiplier = getTripMultiplier(travelType);
+      const totalKm = oneWayKm * tripMultiplier;
+      const totalMiles = kmToMiles(totalKm);
+      const co2 = totalKm * CO2_PER_KM[travelType];
 
       result.innerHTML = `
         <p><strong>Home:</strong> ${selectedHomePlace.formatted_address || selectedHomePlace.name}</p>
         <p><strong>School:</strong> ${SCHOOL.name}</p>
-        <p><strong>Travel type:</strong> ${labels[travelType]}</p>
-        <p><strong>One-way distance:</strong> ${oneWayKm.toFixed(2)} km</p>
-        <p><strong>Round-trip distance:</strong> ${roundTripKm.toFixed(2)} km</p>
-        <p><strong>Estimated CO2 emitted:</strong> ${co2.toFixed(2)} kg</p>
+        <p><strong>Travel type:</strong> ${MODE_LABELS[travelType]}</p>
+        <div class="summary-box">
+          <p><strong>One-way route:</strong> ${oneWayKm.toFixed(2)} km / ${oneWayMiles.toFixed(2)} miles</p>
+          <p><strong>Total school-run distance:</strong> ${totalKm.toFixed(2)} km / ${totalMiles.toFixed(2)} miles</p>
+          <p><strong>Trip multiplier used:</strong> ${tripMultiplier} × one-way journey</p>
+          <p><strong>Estimated CO2 emitted:</strong> ${co2.toFixed(2)} kg CO2e</p>
+        </div>
+        <p class="small">
+          Assumption used: morning school run, return home, afternoon collection, and return home again.
+        </p>
       `;
     });
   }
