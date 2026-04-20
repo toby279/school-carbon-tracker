@@ -67,11 +67,6 @@
       box-sizing: border-box;
       background: #f8f8f8;
     }
-    gmp-place-autocomplete {
-      display: block;
-      width: 100%;
-      margin: 8px 0;
-    }
   </style>
 </head>
 <body>
@@ -82,8 +77,8 @@
     Enter your home address and choose your car type to calculate the distance to school and your CO2 emissions.
   </p>
 
-  <label for="home-autocomplete"><strong>Home address</strong></label>
-  <gmp-place-autocomplete id="home-autocomplete"></gmp-place-autocomplete>
+  <label for="home"><strong>Home address</strong></label>
+  <input id="home" type="text" placeholder="Start typing your address">
 
   <label><strong>School</strong></label>
   <div class="school-box">
@@ -108,6 +103,7 @@
   let map;
   let directionsService;
   let directionsRenderer;
+  let autocomplete;
   let selectedHomePlace = null;
 
   const SCHOOL = {
@@ -122,34 +118,26 @@
     electric: 0
   };
 
-  async function initMap() {
-    const { Map } = await google.maps.importLibrary("maps");
-    await google.maps.importLibrary("places");
-
-    map = new Map(document.getElementById("map"), {
+  function initMap() {
+    map = new google.maps.Map(document.getElementById("map"), {
       center: { lat: 51.4939, lng: -0.2383 },
       zoom: 13
     });
 
     directionsService = new google.maps.DirectionsService();
-    directionsRenderer = new google.maps.DirectionsRenderer({
-      map: map
+    directionsRenderer = new google.maps.DirectionsRenderer({ map: map });
+
+    const input = document.getElementById("home");
+
+    autocomplete = new google.maps.places.Autocomplete(input, {
+      types: ["address"],
+      componentRestrictions: { country: "gb" },
+      fields: ["formatted_address", "geometry", "name"]
     });
 
-    const homeAutocomplete = document.getElementById("home-autocomplete");
-
-    homeAutocomplete.includedPrimaryTypes = ["street_address"];
-    homeAutocomplete.locationBias = {
-      radius: 50000,
-      center: { lat: 51.5074, lng: -0.1278 }
-    };
-
-    homeAutocomplete.addEventListener("gmp-select", async ({ placePrediction }) => {
-      const place = placePrediction.toPlace();
-      await place.fetchFields({
-        fields: ["displayName", "formattedAddress", "location"]
-      });
-      selectedHomePlace = place;
+    autocomplete.addListener("place_changed", () => {
+      selectedHomePlace = autocomplete.getPlace();
+      console.log("Selected place:", selectedHomePlace);
     });
 
     document.getElementById("calcBtn").addEventListener("click", calculateRouteAndCO2);
@@ -159,7 +147,7 @@
     const car = document.getElementById("car").value;
     const result = document.getElementById("result");
 
-    if (!selectedHomePlace || !selectedHomePlace.location) {
+    if (!selectedHomePlace || !selectedHomePlace.geometry || !selectedHomePlace.geometry.location) {
       result.innerHTML = '<p class="error">Please choose your home address from the autocomplete list.</p>';
       return;
     }
@@ -169,10 +157,7 @@
     directionsService.route(
       {
         origin: {
-          location: {
-            lat: selectedHomePlace.location.lat(),
-            lng: selectedHomePlace.location.lng()
-          }
+          location: selectedHomePlace.geometry.location
         },
         destination: {
           placeId: SCHOOL.placeId
@@ -194,7 +179,7 @@
         const co2 = roundTripKm * emissions[car];
 
         result.innerHTML = `
-          <p><strong>Home:</strong> ${selectedHomePlace.formattedAddress}</p>
+          <p><strong>Home:</strong> ${selectedHomePlace.formatted_address || selectedHomePlace.name}</p>
           <p><strong>School:</strong> ${SCHOOL.name}</p>
           <p><strong>One-way distance:</strong> ${oneWayKm.toFixed(2)} km</p>
           <p><strong>Round-trip distance:</strong> ${roundTripKm.toFixed(2)} km</p>
@@ -203,35 +188,10 @@
       }
     );
   }
-
-  window.initMap = initMap;
 </script>
 
-<script>
-  (g => {
-    var h, a, k, p = "The Google Maps JavaScript API",
-      c = "google", l = "importLibrary", q = "__ib__", m = document,
-      b = window; b = b[c] || (b[c] = {});
-    var d = b.maps || (b.maps = {}), r = new Set, e = new URLSearchParams,
-      u = () => h || (h = new Promise(async (f, n) => {
-        await (a = m.createElement("script"));
-        e.set("libraries", [...r] + "");
-        for (k in g) e.set(k.replace(/[A-Z]/g, t => "_" + t[0].toLowerCase()), g[k]);
-        e.set("callback", c + ".maps." + q);
-        a.src = `https://maps.${c}apis.com/maps/api/js?` + e;
-        d[q] = f;
-        a.onerror = () => h = n(Error(p + " could not load."));
-        a.nonce = m.querySelector("script[nonce]")?.nonce || "";
-        m.head.append(a);
-      }));
-    d[l] ? console.warn(p + " only loads once. Ignoring:", g)
-         : d[l] = (f, ...n) => r.add(f) && u().then(() => d[l](f, ...n));
-  })({
-    key: "AIzaSyCnP78JvIO43qRSy32eiq3HFgnnEyuCTUI",
-    v: "weekly"
-  });
-
-  initMap();
+<script async
+  src="https://maps.googleapis.com/maps/api/js?key=AIzaSyCnP78JvIO43qRSy32eiq3HFgnnEyuCTUI&loading=async&libraries=places&callback=initMap">
 </script>
 
 </body>
