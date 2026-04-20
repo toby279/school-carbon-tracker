@@ -1,0 +1,84 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <title>School Carbon Tracker</title>
+  <style>
+    body {
+      font-family: Arial;
+      background: #e8f5e9;
+      padding: 20px;
+    }
+    .box {
+      background: white;
+      padding: 20px;
+      border-radius: 10px;
+      max-width: 400px;
+      margin: auto;
+      box-shadow: 0 4px 10px rgba(0,0,0,0.1);
+    }
+    input, select, button {
+      width: 100%;
+      padding: 10px;
+      margin: 8px 0;
+      border-radius: 5px;
+      border: 1px solid #ccc;
+    }
+    button {
+      background: green;
+      color: white;
+      border: none;
+      cursor: pointer;
+      font-weight: bold;
+    }
+    button:hover {
+      background: darkgreen;
+    }
+  </style>
+</head>
+
+<body>
+
+<div class="box">
+  <h2>School Carbon Tracker</h2>
+
+  <input id="home" placeholder="Your home address">
+  <input id="school" placeholder="Your school">
+
+  <select id="car">
+    <option value="petrol">Petrol</option>
+    <option value="diesel">Diesel</option>
+    <option value="electric">Electric</option>
+  </select>
+
+  <button onclick="calculate()">Calculate CO2 Emissions</button>
+
+  <p id="result"></p>
+</div>
+
+<script>
+  function fakeDistance() {
+    return Math.random() * 5 + 1;
+  }
+
+  function calculate() {
+    const car = document.getElementById("car").value;
+
+    const emissions = {
+      petrol: 0.1294,
+      diesel: 0.173,
+      electric: 0
+    };
+
+    const distance = fakeDistance();
+    const roundTrip = distance * 2;
+    const co2 = roundTrip * emissions[car];
+
+    document.getElementById("result").innerHTML =
+      "Distance (round trip): " + roundTrip.toFixed(2) + " km<br>" +
+      "CO2 emitted: " + co2.toFixed(2) + " kg";
+  }
+</script>
+
+</body>
+</html>
